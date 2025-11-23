@@ -1,0 +1,25 @@
+services:
+  immudb:
+    image: codenotary/immudb:latest
+    ports:
+      - "3322:3322"
+      - "8080:8080"
+    healthcheck:
+      test: ["CMD", "immuadmin", "status"]
+      interval: 3s
+      timeout: 3s
+      retries: 10
+  api:
+    build: .
+    restart: unless-stopped
+    ports:
+      - "8000:8000"
+    environment:
+      - IMMUDB_HOST=immudb
+      - IMMUDB_PORT=3322
+      - IMMUDB_USERNAME=immudb
+      - IMMUDB_PASSWORD=immudb
+      - SECRET_KEY=verysecretkey
+    depends_on:
+      immudb:
+        condition: service_healthy

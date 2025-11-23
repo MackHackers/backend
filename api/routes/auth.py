@@ -1,0 +1,45 @@
+from fastapi import APIRouter, HTTPException, Depends
+from fastapi.security import OAuth2PasswordRequestForm
+import schemas, crud
+from core.security import get_current_user, get_password_hash, verify_password, create_access_token, require_role
+from core.config import settings
+
+router = APIRouter(prefix="", tags=["auth"])
+
+
+@router.post("/register")
+async def register(payload: schemas.UserCreate, user = Depends(get_current_user), allowed = Depends(require_role("root"))):
+    if crud.get_user(payload.username):
+        raise HTTPException(400, "User already exists")
+    
+    if payload.username == settings.root_username:
+        raise HTTPException(400, "Cannot create the root user")
+
+    hashed = get_password_hash(payload.password)
+    crud.save_user(payload.username, hashed, payload.role)
+
+    return {"msg": "user created", "role": payload.role}
+
+
+
+@router.post("/login", response_model=schemas.Token)
+async def login(form_data: OAuth2PasswordRequestForm = Depends()):
+    user = crud.get_user(form_data.username)
+
+    if user["role"] == "root":
+        access_token = create_access_token({
+        "sub": form_data.username,
+        "role": user["role"]
+        })
+
+        return {"access_token": access_token, "token_type": "bearer"}
+
+    if not user or not verify_password(form_data.password, user["password"]):
+        raise HTTPException(400, "Incorrect username or password")
+
+    access_token = create_access_token({
+        "sub": form_data.username,
+        "role": user["role"]
+    })
+
+    return {"access_token": access_token, "token_type": "bearer"}
