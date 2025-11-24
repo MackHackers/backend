@@ -9,6 +9,31 @@ services:
       interval: 3s
       timeout: 3s
       retries: 10
+
+  elasticsearch:
+    image: elasticsearch:9.2.0
+    container_name: elasticsearch
+    environment:
+      - discovery.type=single-node
+      - xpack.security.enabled=false
+      - "ES_JAVA_OPTS=-Xms512m -Xmx512m"
+    ports:
+      - "9200:9200"
+    volumes:
+      - elasticsearch_data:/usr/share/elasticsearch/data
+
+
+  kibana:
+    image: kibana:9.2.0
+    container_name: kibana
+    environment:
+      - ELASTICSEARCH_HOSTS=http://elasticsearch:9200
+    ports:
+      - "5601:5601"
+    depends_on:
+      - elasticsearch
+
+
   api:
     build: .
     restart: unless-stopped
@@ -21,5 +46,13 @@ services:
       - IMMUDB_PASSWORD=immudb
       - SECRET_KEY=verysecretkey
     depends_on:
-      immudb:
-        condition: service_healthy
+      - elasticsearch
+      - immudb:
+          condition: service_healthy
+
+  volumes:
+    elasticsearch_data:
+
+  networks:
+    elastic:
+      driver: bridge

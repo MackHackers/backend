@@ -1,10 +1,22 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+from contextlib import asynccontextmanager
 
+from api.db import es_client
 from routes import auth, protected_example
+from elasticService import document_service
 
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    try:
+        await document_service.create_index()
+    except:
+        raise "blaut"
+    yield
 
-app = FastAPI(title="mcHackersApi")
+    await es_client.close()
+
+app = FastAPI(title="mcHackersApi", lifespan=lifespan)
 
 app.add_middleware(
     CORSMiddleware,
