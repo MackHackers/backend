@@ -1,6 +1,7 @@
 from fastapi import APIRouter, HTTPException, Depends
 from fastapi.security import OAuth2PasswordRequestForm
-import schemas, crud
+import schemas.users as users
+import crud.users as crud
 from core.security import get_current_user, get_password_hash, verify_password, create_access_token, require_role
 from core.config import settings
 
@@ -8,7 +9,7 @@ router = APIRouter(prefix="", tags=["auth"])
 
 
 @router.post("/register")
-async def register(payload: schemas.UserCreate, user = Depends(get_current_user), allowed = Depends(require_role("root"))):
+async def register(payload: users.UserCreate, user = Depends(get_current_user), allowed = Depends(require_role("root"))):
     if crud.get_user(payload.username):
         raise HTTPException(400, "User already exists")
     
@@ -22,7 +23,7 @@ async def register(payload: schemas.UserCreate, user = Depends(get_current_user)
 
 
 
-@router.post("/login", response_model=schemas.Token)
+@router.post("/login", response_model=users.Token)
 async def login(form_data: OAuth2PasswordRequestForm = Depends()):
     user = crud.get_user(form_data.username)
 

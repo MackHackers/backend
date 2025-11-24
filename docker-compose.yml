@@ -19,40 +19,21 @@ services:
       - "ES_JAVA_OPTS=-Xms512m -Xmx512m"
     ports:
       - "9200:9200"
-    volumes:
-      - elasticsearch_data:/usr/share/elasticsearch/data
 
 
-  kibana:
-    image: kibana:9.2.0
-    container_name: kibana
-    environment:
-      - ELASTICSEARCH_HOSTS=http://elasticsearch:9200
-    ports:
-      - "5601:5601"
-    depends_on:
-      - elasticsearch
 
-
-  api:
-    build: .
-    restart: unless-stopped
-    ports:
-      - "8000:8000"
-    environment:
-      - IMMUDB_HOST=immudb
-      - IMMUDB_PORT=3322
-      - IMMUDB_USERNAME=immudb
-      - IMMUDB_PASSWORD=immudb
-      - SECRET_KEY=verysecretkey
-    depends_on:
-      - elasticsearch
-      - immudb:
-          condition: service_healthy
-
-  volumes:
-    elasticsearch_data:
-
-  networks:
-    elastic:
-      driver: bridge
+  # api:
+  #   build: .
+  #   restart: unless-stopped
+  #   ports:
+  #     - "8000:8000"
+  #   environment:
+  #     - IMMUDB_HOST=immudb
+  #     - IMMUDB_PORT=3322
+  #     - IMMUDB_USERNAME=immudb
+  #     - IMMUDB_PASSWORD=immudb
+  #     - SECRET_KEY=verysecretkey
+  #   depends_on:
+  #     - elasticsearch
+  #     - immudb:
+  #         condition: service_healthy

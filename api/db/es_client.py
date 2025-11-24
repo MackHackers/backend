@@ -1,7 +1,7 @@
 import logging
 from elasticsearch import Elasticsearch, AsyncElasticsearch
 
-from .config import settings
+from core.config import settings
 
 logger = logging.getLogger(__name__)
 

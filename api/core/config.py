@@ -1,3 +1,4 @@
+from typing import Optional
 from pydantic_settings import BaseSettings
 
 
@@ -12,6 +13,7 @@ class Settings(BaseSettings):
     root_username: str = "root"
     root_password: str = "root"
 
+
     elasticsearch_host: str = "localhost"
     elasticsearch_port: int = 9200
     elasticsearch_scheme: str = "http"
@@ -19,19 +21,7 @@ class Settings(BaseSettings):
     elasticsearch_password: Optional[str] = None
     elasticsearch_ca_certs: Optional[str] = None
 
-    app_name: str = "Elasticsearch Document Microservice"
-    debug: bool = False
-    host: str = "0.0.0.0"
-    port: int = 8000
-    log_level: str = "INFO"
-
     documents_index: str = "documents"
-
-    model_config = {
-        "env_file": ".env",
-        "case_sensitive": False,
-        "extra": "ignore",
-    }
 
     class Config:
         env_file = ".env"

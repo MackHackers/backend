@@ -1,4 +1,5 @@
 import logging
+from pydoc import doc
 from typing import List, Optional, Dict, Any
 from uuid import UUID
 from datetime import datetime
@@ -11,9 +12,8 @@ from elasticsearch.exceptions import (
 )
 from elasticsearch.helpers import async_bulk
 
-from schemas import (
-    Document,
-    DocumentCreate,
+from schemas.documents import (
+    DocumentBase,
     DocumentResponse,
     DocumentUpdate,
     SearchQuery,
@@ -57,24 +57,23 @@ class DocumentService:
         except (NotFoundError, ConnectionError, RequestError, ApiError) as e:
             raise Exception(f"Failed to create index: {e}")
 
-    async def create_document(self, document: DocumentCreate) -> Document:
-        doc = Document(**document.model_dump())
+    async def create_document(self, document: DocumentBase) -> DocumentBase:
 
         try:
             await self.client.index(
                 index=self.index_name,
-                id=str(doc.id),
-                document=doc.model_dump(),
+                id=str(document.id),
+                document=document.model_dump(),
                 refresh=True,
             )
-            return doc
+            return document
         except (NotFoundError, ConnectionError, RequestError, ApiError) as e:
             raise Exception(f"Failed to create document: {e}")
 
-    async def get_document(self, document_id: UUID) -> Optional[Document]:
+    async def get_document(self, document_id: UUID) -> Optional[DocumentBase]:
         try:
             response = await self.client.get(index=self.index_name, id=str(document_id))
-            return Document(**response["_source"])
+            return DocumentBase(**response["_source"])
         except NotFoundError:
             return None
         except (ConnectionError, RequestError, ApiError) as e:
@@ -82,7 +81,7 @@ class DocumentService:
 
     async def update_document(
         self, document_id: UUID, update_data: DocumentUpdate
-    ) -> Optional[Document]:
+    ) -> DocumentBase | None:
         current_doc = await self.get_document(document_id)
         if not current_doc:
             return None
@@ -133,7 +132,7 @@ class DocumentService:
                         {
                             "multi_match": {
                                 "query": search_query.query,
-                                "fields": search_query.fields or default_fields,
+                                "fields": default_fields,
                                 "fuzziness": "AUTO",
                                 "operator": "or",
                                 "type": "best_fields",
@@ -161,35 +160,6 @@ class DocumentService:
         except (NotFoundError, ConnectionError, RequestError, ApiError) as e:
             raise Exception(f"Search failed: {e}")
 
-    async def bulk_create_documents(
-        self, documents: List[DocumentCreate]
-    ) -> Dict[str, Any]:
-        actions = []
-        for doc_create in documents:
-            doc = Document(**doc_create.model_dump())
-            actions.append(
-                {
-                    "_index": self.index_name,
-                    "_id": str(doc.id),
-                    "_source": doc.model_dump(),
-                }
-            )
-
-        try:
-            success, errors = await async_bulk(
-                self.client, actions, raise_on_error=False
-            )
-            error_count = len(errors) if errors else 0
-
-            return {
-                "processed": len(documents),
-                "successful": success,
-                "errors": error_count,
-                "error_details": errors,
-            }
-        except (NotFoundError, ConnectionError, RequestError, ApiError) as e:
-            raise Exception(f"Bulk operation failed: {e}")
-
     async def get_all_documents(self, size: int = 100) -> List[DocumentResponse]:
         try:
             response = await self.client.search(
@@ -204,7 +174,6 @@ class DocumentService:
             results = [DocumentResponse(**hit["_source"]) for hit in hits]
 
             return results
-        
         except (NotFoundError, ConnectionError, RequestError, ApiError) as e:
             raise Exception(f"Failed to get all documents: {e}")
 
