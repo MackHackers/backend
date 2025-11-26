@@ -6,13 +6,14 @@ from typing import Optional, List, Dict, Any
 
 class DocumentBase(BaseModel):
     id: str
+    deleted: bool
     title: str 
     content: str 
     author: str
     tags: List[str]
     metadata: Dict[str, Any]
-    created_at: datetime = datetime.utcnow()
-    updated_at: datetime = datetime.utcnow()
+    created_at: datetime 
+    updated_at: datetime
 
 
 

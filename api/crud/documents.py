@@ -2,6 +2,7 @@ import uuid
 import json
 from datetime import datetime
 from typing import Optional
+from schemas.documents import DocumentBase
 
 from db.immudb_client import immudb
 
@@ -32,6 +33,7 @@ def create_document(data: dict, creator: str) -> dict:
 
     doc = {
         "id": data["id"],
+        "deleted": False,
         "title": data["title"],
         "content": data["content"],
         "author": data.get("author"),
@@ -51,6 +53,48 @@ def create_document(data: dict, creator: str) -> dict:
     _save_index(idx)
 
     return doc
+
+def delete_document(doc_id: str):
+    entry = immudb.get(DOC_PREFIX + doc_id.encode())
+    if not entry:
+        return None
+
+    data = json.loads(entry.value.decode())
+
+    data["deleted"] = not bool(data["deleted"])
+    immudb.set(DOC_PREFIX + data["id"].encode(), json.dumps(data).encode())
+
+    return data
+
+
+def update_document(data: DocumentBase):
+    entry = immudb.get(DOC_PREFIX + data.id.encode())
+    print(entry)
+
+    if not entry:
+        return None
+    
+    entry = json.loads(entry.value.decode())
+    now = datetime.utcnow().isoformat() + "Z"
+
+    new_doc = {
+        "id": entry["id"],
+        "deleted": False,
+        "title": data.title,
+        "content": data.content,
+        "author": data.author,
+        "tags": data.tags,
+        "metadata": data.metadata,
+        "creator": entry.get("creator"),
+        "created_at": entry.get("created_at"),
+        "updated_at": now,
+    }
+
+    # save document in immudb
+    immudb.set(DOC_PREFIX + entry["id"].encode(), json.dumps(new_doc).encode())
+
+
+    return new_doc
 
 
 def get_document(doc_id: str) -> Optional[dict]:

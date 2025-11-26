@@ -8,20 +8,6 @@ from core.config import settings
 router = APIRouter(prefix="", tags=["auth"])
 
 
-@router.post("/register")
-async def register(payload: users.UserCreate, user = Depends(get_current_user), allowed = Depends(require_role("manager"))):
-    if crud.get_user(payload.username):
-        raise HTTPException(400, "User already exists")
-    
-    if payload.username == settings.root_username:
-        raise HTTPException(400, "Cannot create the root user")
-
-    hashed = get_password_hash(payload.password)
-    crud.save_user(payload.username, hashed, payload.role)
-
-    return {"msg": "user created", "role": payload.role}
-
-
 
 @router.post("/login", response_model=users.Token)
 async def login(form_data: OAuth2PasswordRequestForm = Depends()):
