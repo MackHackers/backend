@@ -9,7 +9,7 @@ router = APIRouter(prefix="", tags=["auth"])
 
 
 @router.post("/register")
-async def register(payload: users.UserCreate, user = Depends(get_current_user), allowed = Depends(require_role("root"))):
+async def register(payload: users.UserCreate, user = Depends(get_current_user), allowed = Depends(require_role("manager"))):
     if crud.get_user(payload.username):
         raise HTTPException(400, "User already exists")
     
@@ -44,3 +44,8 @@ async def login(form_data: OAuth2PasswordRequestForm = Depends()):
     })
 
     return {"access_token": access_token, "token_type": "bearer"}
+
+
+@router.get("/me")
+def get_me(user = Depends(get_current_user)):
+    return user

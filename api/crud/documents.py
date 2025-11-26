@@ -60,5 +60,5 @@ def get_document(doc_id: str) -> Optional[dict]:
     return json.loads(entry.value.decode())
 
 
-def list_documents() -> list:
+def list_documents() -> list[str]:
     return _load_index()

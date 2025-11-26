@@ -18,17 +18,19 @@ async def create_doc(payload: DocumentBase, user = Depends(get_current_user), al
 
 
 @router.get("/search")
-async def simple_search(q: str = "", limit: int = 10, offset: int = 0, user = Depends(get_current_user), allowed = Depends(require_role("viewer"))):
+async def simple_search(q: str, limit: int = 10, offset: int = 0, user = Depends(get_current_user), allowed = Depends(require_role("viewer"))):
     try:
         search_query = SearchQuery(query=q, size=limit, from_=offset)
-        return await document_service.search_documents(search_query)
+        res = await document_service.search_documents(search_query)
+        print(res)
+        return res
     except Exception as e:
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Search failed: {e}",
         )
     
-@router.get("/")
+@router.get("/all")
 async def list_docs(user = Depends(get_current_user), allowed = Depends(require_role("viewer"))):
     print("Listing documents for user:", user["username"])
     return list_documents()

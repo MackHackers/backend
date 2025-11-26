@@ -20,8 +20,6 @@ services:
     ports:
       - "9200:9200"
 
-
-
   # api:
   #   build: .
   #   restart: unless-stopped
@@ -35,5 +33,4 @@ services:
   #     - SECRET_KEY=verysecretkey
   #   depends_on:
   #     - elasticsearch
-  #     - immudb:
-  #         condition: service_healthy
+  #     - immudb
