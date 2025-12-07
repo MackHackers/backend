@@ -5,7 +5,7 @@ from contextlib import asynccontextmanager
 from services.elasticService import document_service
 from db.es_client import es_client
 
-from routes import auth, documents, users
+from routes import auth, documents, users, news, learn
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
@@ -32,6 +32,8 @@ app.add_middleware(
 app.include_router(auth.router)
 app.include_router(documents.router)
 app.include_router(users.router)
+app.include_router(news.router)
+app.include_router(learn.router)
 
 if __name__ == "__main__":
     import uvicorn
