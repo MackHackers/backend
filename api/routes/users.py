@@ -22,4 +22,25 @@ async def register(payload: users.UserCreate, user = Depends(get_current_user), 
 
 @router.get("/")
 async def get_all_usernames(user = Depends(get_current_user), allowed = Depends(require_role("manager"))):
-    return crud.list_users() or []
+    usernames = crud.list_users() or []
+    users_list = []
+    for username in usernames:
+        user_data = crud.get_user(username)
+        if user_data:
+            users_list.append({
+                "id": username,
+                "username": username,
+                "role": user_data.get("role", "viewer")
+            })
+    return users_list
+
+@router.delete("/{user_id}")
+async def delete_user(user_id: str, user = Depends(get_current_user), allowed = Depends(require_role("manager"))):
+    if user_id == settings.root_username:
+        raise HTTPException(400, "Cannot delete the root user")
+    
+    if not crud.get_user(user_id):
+        raise HTTPException(404, "User not found")
+    
+    crud.delete_user(user_id)
+    return {"message": "User deleted successfully"}

@@ -53,3 +53,12 @@ def get_user(username: str):
         return None
     
     return json.loads(entry.value.decode())
+
+def delete_user(username: str):
+    key = USER_PREFIX + username.encode()
+    immudb.delete(key)
+    
+    idx = _load_index()
+    if username in idx:
+        idx.remove(username)
+        _save_index(idx)
