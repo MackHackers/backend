@@ -1,5 +1,5 @@
+import asyncio
 import logging
-from pydoc import doc
 from typing import List, Optional, Dict, Any
 from uuid import UUID
 from datetime import datetime
@@ -10,8 +10,6 @@ from elasticsearch.exceptions import (
     RequestError,
     ApiError,
 )
-from elasticsearch.helpers import async_bulk
-
 from schemas.documents import (
     DocumentBase,
     DocumentResponse,
@@ -21,13 +19,17 @@ from schemas.documents import (
 )
 from db.es_client import es_client
 from core.config import settings
+from services.vectorService import vector_service
 
+
+logger = logging.getLogger(__name__)
 
 
 class DocumentService:
     def __init__(self):
         self.index_name = settings.documents_index
         self.client = es_client.get_async_client()
+        self.vector_service = vector_service if settings.vector_search_enabled else None
 
     async def create_index(self) -> bool:
         mapping = {
@@ -66,6 +68,13 @@ class DocumentService:
                 document=document.model_dump(),
                 refresh=True,
             )
+            if self.vector_service:
+                try:
+                    await self.vector_service.upsert_document(document)
+                except Exception as vector_err:
+                    logger.warning(
+                        "Vector upsert failed for %s: %s", document.id, vector_err
+                    )
             return document
         except (NotFoundError, ConnectionError, RequestError, ApiError) as e:
             raise Exception(f"Failed to create document: {e}")
@@ -99,6 +108,13 @@ class DocumentService:
                 document=current_doc.model_dump(),
                 refresh=True,
             )
+            if self.vector_service:
+                try:
+                    await self.vector_service.upsert_document(current_doc)
+                except Exception as vector_err:
+                    logger.warning(
+                        "Vector update failed for %s: %s", document_id, vector_err
+                    )
             return current_doc
         except (NotFoundError, ConnectionError, RequestError, ApiError) as e:
             raise Exception(f"Failed to update document: {e}")
@@ -109,6 +125,13 @@ class DocumentService:
                 index=self.index_name, id=str(document_id)
             )
             deleted = response["result"] == "deleted"
+            if deleted and self.vector_service:
+                try:
+                    await self.vector_service.delete_document(str(document_id))
+                except Exception as vector_err:
+                    logger.warning(
+                        "Vector delete failed for %s: %s", document_id, vector_err
+                    )
             return deleted
         except NotFoundError:
             return False
@@ -123,9 +146,9 @@ class DocumentService:
         except (ConnectionError, ApiError) as e:
             raise Exception(f"Failed to delete document: {e}")
 
-    async def search_documents(self, search_query: SearchQuery) -> SearchResponse:
+    def _build_es_query(self, search_query: SearchQuery) -> Dict[str, Any]:
         default_fields = ["title^3", "content^2", "author^2", "tags^2"]
-        query_body = {
+        return {
             "query": {
                 "bool": {
                     "should": [
@@ -147,18 +170,86 @@ class DocumentService:
             "from": search_query.from_,
         }
 
+    async def _search_elasticsearch(
+        self, search_query: SearchQuery
+    ) -> tuple[int, List[DocumentResponse], int]:
+        query_body = self._build_es_query(search_query)
         try:
             response = await self.client.search(index=self.index_name, body=query_body)
             hits = response["hits"]["hits"]
             results = [DocumentResponse(**hit["_source"]) for hit in hits]
-
-            return SearchResponse(
-                total=response["hits"]["total"]["value"],
-                results=results,
-                took=response["took"],
-            )
+            total = response["hits"]["total"]["value"]
+            return total, results, response["took"]
         except (NotFoundError, ConnectionError, RequestError, ApiError) as e:
             raise Exception(f"Search failed: {e}")
+
+    async def _search_vector(self, search_query: SearchQuery) -> List[DocumentResponse]:
+        if not self.vector_service:
+            return []
+
+        try:
+            hits = await self.vector_service.search(
+                search_query.query, search_query.size
+            )
+        except Exception as e:
+            logger.warning("Vector search failed: %s", e)
+            return []
+
+        results: List[DocumentResponse] = []
+        for hit in hits:
+            payload = hit.payload or {}
+            try:
+                results.append(DocumentResponse(**payload))
+            except Exception as parse_err:
+                logger.debug(
+                    "Skipping malformed vector payload for %s: %s",
+                    payload.get("id"),
+                    parse_err,
+                )
+        return results
+
+    def _merge_results(
+        self,
+        vector_results: List[DocumentResponse],
+        es_results: List[DocumentResponse],
+        limit: int,
+    ) -> List[DocumentResponse]:
+        merged: List[DocumentResponse] = []
+        seen: set[str] = set()
+
+        for doc in vector_results:
+            if doc.id in seen:
+                continue
+            merged.append(doc)
+            seen.add(doc.id)
+
+        for doc in es_results:
+            if doc.id in seen:
+                continue
+            merged.append(doc)
+            seen.add(doc.id)
+
+        return merged[:limit]
+
+    async def search_documents(self, search_query: SearchQuery) -> SearchResponse:
+        es_task = asyncio.create_task(self._search_elasticsearch(search_query))
+        vector_task = (
+            asyncio.create_task(self._search_vector(search_query))
+            if self.vector_service
+            else None
+        )
+
+        es_total, es_results, es_took = await es_task
+        vector_results = await vector_task if vector_task else []
+
+        merged_results = self._merge_results(
+            vector_results=vector_results,
+            es_results=es_results,
+            limit=search_query.size,
+        )
+        total = max(es_total, len(vector_results), len(merged_results))
+
+        return SearchResponse(total=total, results=merged_results, took=es_took)
 
     async def get_all_documents(self, size: int = 100) -> List[DocumentResponse]:
         try:
