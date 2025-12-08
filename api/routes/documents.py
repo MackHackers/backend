@@ -1,22 +1,41 @@
 from fastapi import APIRouter, Depends, HTTPException, status
-from schemas.documents import DocumentBase, DocumentOut, SearchQuery
+from uuid import UUID
+
+from schemas.documents import DocumentBase, DocumentOut, DocumentUpdate, SearchQuery
 from core.security import get_current_user, require_role
-from crud.documents import create_document, get_document, list_documents, update_document, delete_document
+from crud.documents import (
+    create_document,
+    get_document,
+    list_documents,
+    update_document,
+    delete_document,
+)
 from services.elasticService import document_service
 
 router = APIRouter(prefix="/documents", tags=["documents"])
 
 
 @router.post("/create", response_model=DocumentOut, status_code=status.HTTP_201_CREATED)
-async def create_doc(payload: DocumentBase, user = Depends(get_current_user), allowed = Depends(require_role("manager"))):
+async def create_doc(
+    payload: DocumentBase,
+    user=Depends(get_current_user),
+    allowed=Depends(require_role("manager")),
+):
     creator = user["username"]
     doc = create_document(payload.model_dump(), creator)
     elastic_doc = await document_service.create_document(payload)
     print(elastic_doc)
     return doc
 
+
 @router.get("/search")
-async def simple_search(q: str, limit: int = 10, offset: int = 0, user = Depends(get_current_user), allowed = Depends(require_role("viewer"))):
+async def simple_search(
+    q: str,
+    limit: int = 10,
+    offset: int = 0,
+    user=Depends(get_current_user),
+    allowed=Depends(require_role("viewer")),
+):
     try:
         search_query = SearchQuery(query=q, size=limit, from_=offset)
         res = await document_service.search_documents(search_query)
@@ -27,29 +46,63 @@ async def simple_search(q: str, limit: int = 10, offset: int = 0, user = Depends
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Search failed: {e}",
         )
-    
+
+
 @router.get("/all")
-async def list_docs(user = Depends(get_current_user), allowed = Depends(require_role("viewer"))):
+async def list_docs(
+    user=Depends(get_current_user), allowed=Depends(require_role("viewer"))
+):
     print("Listing documents for user:", user["username"])
     return list_documents()
 
+
 @router.put("/update", response_model=DocumentOut)
-async def read_doc(payload: DocumentBase, user = Depends(get_current_user), allowed = Depends(require_role("manager"))):
+async def read_doc(
+    payload: DocumentBase,
+    user=Depends(get_current_user),
+    allowed=Depends(require_role("manager")),
+):
     doc = update_document(payload)
     if not doc:
         raise HTTPException(status_code=405, detail="Document not found")
+    try:
+        await document_service.update_document(
+            UUID(payload.id),
+            DocumentUpdate(
+                title=payload.title,
+                content=payload.content,
+                author=payload.author,
+                tags=payload.tags,
+                metadata=payload.metadata,
+            ),
+        )
+    except Exception:
+        # Keep original behavior even if search index update fails.
+        pass
     return doc
 
+
 @router.get("/", response_model=DocumentOut)
-async def read_doc(doc_id: str, user = Depends(get_current_user), allowed = Depends(require_role("viewer"))):
+async def read_doc(
+    doc_id: str, user=Depends(get_current_user), allowed=Depends(require_role("viewer"))
+):
     doc = get_document(doc_id)
     if not doc:
         raise HTTPException(status_code=404, detail="Document not found")
     return doc
 
+
 @router.delete("/", response_model=DocumentOut)
-async def delete_doc(doc_id: str, user = Depends(get_current_user), allowed = Depends(require_role("manager"))):
+async def delete_doc(
+    doc_id: str,
+    user=Depends(get_current_user),
+    allowed=Depends(require_role("manager")),
+):
     doc = delete_document(doc_id)
     if not doc:
         raise HTTPException(status_code=404, detail="Document not found")
+    try:
+        await document_service.delete_document(UUID(doc_id))
+    except Exception:
+        pass
     return doc
